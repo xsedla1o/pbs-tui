@@ -641,6 +641,7 @@ class PBSTUI(App[None]):
         *,
         fetcher: Optional[PBSDataFetcher] = None,
         refresh_interval: float = 30.0,
+        job_filter: Optional[str] = None,
     ) -> None:
         super().__init__()
         if HAS_TEXTUAL_THEME_SUPPORT and PBS_DARK_THEME and PBS_LIGHT_THEME:
@@ -654,7 +655,7 @@ class PBSTUI(App[None]):
         self._node_index: dict[str, Node] = {}
         self._queue_index: dict[str, Queue] = {}
         self._refreshing: bool = False
-        self._job_filter: str = ""
+        self._job_filter: str = job_filter or ""
         self._selected_job_id: Optional[str] = None
         self._selected_node_name: Optional[str] = None
         self._selected_queue_name: Optional[str] = None
@@ -670,6 +671,7 @@ class PBSTUI(App[None]):
                     with TabPane("Jobs", id="jobs_tab"):
                         with Vertical(id="jobs_tab_content"):
                             yield Input(
+                                value=self._job_filter,
                                 placeholder="Filter jobs…",
                                 id="jobs_filter",
                             )
@@ -1010,6 +1012,12 @@ def run(
         help="How often the TUI refreshes PBS data (default: 30).",
     )
     parser.add_argument(
+        "-f", "--filter",
+        type=str,
+        metavar="EXPRESSION",
+        help="Filter jobs using EXPRESSION. (initial value when interactive)",
+    )
+    parser.add_argument(
         "--ssh",
         type=str,
         metavar="OPTS",
@@ -1051,7 +1059,11 @@ def run(
 
         auto_pilot = _auto_quit
 
-    app = PBSTUI(fetcher=fetcher_instance, refresh_interval=args.refresh_interval)
+    app = PBSTUI(
+        fetcher=fetcher_instance,
+        refresh_interval=args.refresh_interval,
+        job_filter=args.filter
+    )
     app.run(headless=headless, auto_pilot=auto_pilot)
 
 
