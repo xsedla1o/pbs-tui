@@ -1009,9 +1009,17 @@ def run(
         metavar="SECONDS",
         help="How often the TUI refreshes PBS data (default: 30).",
     )
+    parser.add_argument(
+        "--ssh",
+        type=str,
+        metavar="OPTS",
+        help="Use OPTS as options for SSH proxy command to connect to the PBS server.",
+    )
     args = parser.parse_args(argv)
 
     fetcher_instance = fetcher or PBSDataFetcher()
+    if args.ssh:
+        fetcher_instance.ssh_opts = args.ssh
 
     if args.file and not args.inline:
         parser.error("--file can only be used together with --inline")

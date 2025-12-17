@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import os
+import shlex
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple, TypeVar
@@ -219,6 +220,7 @@ class PBSDataFetcher:
         command_timeout: float = 15.0,
         fallback_to_sample: bool = True,
         force_sample: Optional[bool] = None,
+        ssh_opts: Optional[str] = None,
     ) -> None:
         env_force_sample = os.getenv("PBS_TUI_SAMPLE_DATA")
         if force_sample is None and env_force_sample is not None:
@@ -230,6 +232,7 @@ class PBSDataFetcher:
         self.include_queues = include_queues
         self.command_timeout = command_timeout
         self.fallback_to_sample = fallback_to_sample
+        self.ssh_opts = ssh_opts
         self._qstat_jobs_json_cmd = [self.qstat_path, "-f", "-F", "json"]
         self._qstat_jobs_cmd = [self.qstat_path, "-f", "-x"]
         self._qstat_jobs_text_cmd = [self.qstat_path, "-f"]
@@ -346,6 +349,8 @@ class PBSDataFetcher:
         """Execute *cmd* asynchronously and return ``(stdout, error)``."""
 
         try:
+            if self.ssh_opts is not None:
+                cmd = ["ssh", *shlex.split(self.ssh_opts), f"{' '.join(cmd)}"]
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
