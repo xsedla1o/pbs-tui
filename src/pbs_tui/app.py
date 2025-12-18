@@ -524,6 +524,15 @@ class DetailPanel(Static):
         self.update(Panel(Text(message), title="Details"))
 
 
+def _get_job_cells(job, reference_time: datetime) -> tuple[str, ...]:
+    if job.display_cells:
+        return job.display_cells
+    cells = format_job_table_cells(job, reference_time)
+    ordered = [cells[label] for label, _ in JOB_TABLE_COLUMNS]
+    job.display_cells = tuple(_format_cell_value(value) for value in ordered)
+    return job.display_cells
+
+
 class JobsTable(DataTable):
     """Data table displaying jobs."""
 
@@ -531,14 +540,44 @@ class JobsTable(DataTable):
         self.cursor_type = "row"
         self.zebra_stripes = True
         self.show_header = True
-        self.add_columns(*(label for label, _ in JOB_TABLE_COLUMNS))
+        self._add_columns((label for label, _ in JOB_TABLE_COLUMNS))
 
-    def update_jobs(self, jobs: Iterable[Job], reference_time: datetime) -> None:
-        self.clear()
+    def _add_columns(self, cols: Iterable[str]) -> None:
+        for col in cols:
+            self.add_column(col, key=col)
+
+    def update_jobs(self, jobs: Iterable[Job], reference_time: datetime, incremental=False) -> None:
+        if incremental:
+            self._update_jobs_incremental(jobs, reference_time)
+        else:
+            self._update_jobs_full(jobs, reference_time)
+
+    def _update_jobs_full(self, jobs: Iterable[Job], reference_time: datetime) -> None:
+        self.clear(columns=True)
+        self._add_columns((label for label, _ in JOB_TABLE_COLUMNS))
         for job in _sort_jobs_for_display(jobs):
-            cells = format_job_table_cells(job, reference_time)
-            ordered = [cells[label] for label, _ in JOB_TABLE_COLUMNS]
-            self.add_row(*(_format_cell_value(value) for value in ordered), key=job.id)
+            self.add_row(*_get_job_cells(job, reference_time), key=job.id)
+
+    def _update_jobs_incremental(self, jobs: Iterable[Job], reference_time: datetime) -> None:
+        existing_keys = {key for key in self.rows.keys()}
+        existing_key_values = {key.value for key in existing_keys}
+        new_keys = {job.id for job in jobs}
+        new_job_keys = new_keys - existing_key_values
+        new_jobs = (job for job in jobs if job.id not in existing_key_values)
+        removed_keys = {key for key in existing_keys if key.value not in new_keys}
+
+        if len(removed_keys) > len(new_job_keys) or len(removed_keys) > len(existing_keys) // 2:
+            return self._update_jobs_full(jobs, reference_time)
+
+        for job in new_jobs:
+            self.add_row(*_get_job_cells(job, reference_time), key=job.id)
+        for key in removed_keys:
+            self.remove_row(key)
+        self.sort("State", "Queue", "#JobId", key=lambda row: (
+            0 if row[0] == "Running" else 1,
+            row[1] or "",
+            row[2],
+        ))
 
 
 class HelpPanel(Static):
@@ -742,13 +781,13 @@ class PBSTUI(App[None]):
         self._queue_index = {queue.name: queue for queue in snapshot.queues}
         self._update_detail_panel(reference_time=snapshot.timestamp)
 
-    def _refresh_jobs_table(self) -> None:
+    def _refresh_jobs_table(self, incremental=False) -> None:
         jobs_table = self.query_one(JobsTable)
         if self._snapshot is None:
             return
         reference_time = self._snapshot.timestamp or datetime.now()
         filtered_jobs = self._get_filtered_jobs()
-        jobs_table.update_jobs(filtered_jobs, reference_time)
+        jobs_table.update_jobs(filtered_jobs, reference_time, incremental=incremental)
         if self._selected_job_id:
             if selected_job := next(
                 (job for job in filtered_jobs if job.id == self._selected_job_id),
@@ -783,7 +822,7 @@ class PBSTUI(App[None]):
                 job for job in self._snapshot.jobs if self._job_matches_filter(job)
             )
 
-        return _sort_jobs_for_display(filtered_jobs)
+        return list(filtered_jobs)
 
     def _job_matches_filter(self, job: Job) -> bool:
         if not self._job_filter:
@@ -837,7 +876,7 @@ class PBSTUI(App[None]):
         if event.input.id == "jobs_filter":
             self._job_filter_prev = self._job_filter
             self._job_filter = event.value.strip()
-            self._refresh_jobs_table()
+            self._refresh_jobs_table(incremental=True)
 
     def _on_key(self, event: events.Key) -> None:
         if event.key == "enter" or event.key == "escape":

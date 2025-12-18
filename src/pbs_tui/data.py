@@ -33,6 +33,7 @@ class Job:
     exit_status: Optional[str] = None
     filter_key: Optional[str] = None
     last_filter_result: bool = True
+    display_cells: Optional[tuple[str, ...]] = None
 
     def runtime(self, reference: Optional[datetime] = None) -> Optional[timedelta]:
         """Return the runtime of the job using *reference* as the end time."""
