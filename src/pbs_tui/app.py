@@ -745,7 +745,7 @@ class PBSTUI(App[None]):
         if self._snapshot is None:
             return
         reference_time = self._snapshot.timestamp or datetime.now()
-        filtered_jobs = self._get_filtered_jobs(reference_time)
+        filtered_jobs = self._get_filtered_jobs()
         jobs_table.update_jobs(filtered_jobs, reference_time)
         if self._selected_job_id:
             if selected_job := next(
@@ -764,24 +764,40 @@ class PBSTUI(App[None]):
             self.query_one(DetailPanel).hide()
         self._update_detail_panel(reference_time=reference_time)
 
-    def _get_filtered_jobs(self, reference_time: datetime) -> list[Job]:
+    def _get_filtered_jobs(self) -> list[Job]:
         if self._snapshot is None:
             return []
+        self._job_filter_terms = self._job_filter.lower().split()
         return [
             job
             for job in _sort_jobs_for_display(self._snapshot.jobs)
-            if self._job_matches_filter(job, reference_time)
+            if self._job_matches_filter(job)
         ]
 
-    def _job_matches_filter(self, job: Job, reference_time: datetime) -> bool:
+    def _job_matches_filter(self, job: Job) -> bool:
         if not self._job_filter:
             return True
-        terms = self._job_filter.lower().split()
+        terms = self._job_filter_terms
         if not terms:
             return True
-        cells = format_job_table_cells(job, reference_time)
-        row_values = [(value or "").lower() for value in cells.values()]
-        return not any(all(term not in value for value in row_values) for term in terms)
+        if job.filter_key is None:
+            node_count, first_node = job_node_summary(job)
+            if node_count is not None and first_node:
+                nodes_display = f"{node_count} ({first_node})"
+            elif node_count is not None:
+                nodes_display = str(node_count)
+            else:
+                nodes_display = first_node
+            values = [
+                _truncate_job_id(job.id),
+                job.user,
+                job.name,
+                nodes_display,
+                JOB_STATE_LABELS.get(job.state, job.state),
+                job.queue,
+            ]
+            job.filter_key = " ".join((x.lower() for x in values if x))
+        return not any(term not in job.filter_key for term in terms)
 
     async def action_refresh(self) -> None:
         await self.refresh_data()
