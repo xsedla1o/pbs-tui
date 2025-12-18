@@ -5,7 +5,6 @@ from __future__ import annotations
 JOB_TABLE_COLUMNS: list[tuple[str, str]] = [
     ("#JobId", "left"),
     ("User", "left"),
-    ("Account", "left"),
     ("JobName", "left"),
     ("Queue", "left"),
     ("WallTime", "right"),

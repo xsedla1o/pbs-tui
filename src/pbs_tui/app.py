@@ -291,7 +291,6 @@ def format_job_table_cells(job: Job, reference_time: datetime) -> dict[str, Opti
     raw_values: dict[str, Optional[str]] = {
         "#JobId": _truncate_job_id(job.id),
         "User": job.user,
-        "Account": job.account,
         "JobName": job.name,
         "WallTime": job.walltime,
         "QueuedTime": _format_duration(queued_duration),
@@ -408,7 +407,6 @@ class DetailPanel(Static):
         add_row("Job ID", job.id)
         add_row("Job name", job.name)
         add_row("User", job.user)
-        add_row("Account", job.account)
         add_row("Queue", job.queue)
         add_row("State", JOB_STATE_LABELS.get(job.state, job.state))
         add_row("Exec host", job.exec_host)
