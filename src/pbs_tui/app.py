@@ -17,6 +17,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
+from textual import events
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
@@ -837,6 +838,12 @@ class PBSTUI(App[None]):
             self._job_filter_prev = self._job_filter
             self._job_filter = event.value.strip()
             self._refresh_jobs_table()
+
+    def _on_key(self, event: events.Key) -> None:
+        if event.key == "enter" or event.key == "escape":
+            focused = self.focused
+            if isinstance(focused, Input):
+                self.query_one(JobsTable).focus()
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         if isinstance(event.data_table, JobsTable):
