@@ -666,6 +666,7 @@ class PBSTUI(App[None]):
         self._queue_index: dict[str, Queue] = {}
         self._refreshing: bool = False
         self._job_filter: str = job_filter or ""
+        self._job_filter_prev: str = ""
         self._selected_job_id: Optional[str] = None
         self._selected_node_name: Optional[str] = None
         self._selected_queue_name: Optional[str] = None
@@ -768,11 +769,20 @@ class PBSTUI(App[None]):
         if self._snapshot is None:
             return []
         self._job_filter_terms = self._job_filter.lower().split()
-        return [
-            job
-            for job in _sort_jobs_for_display(self._snapshot.jobs)
-            if self._job_matches_filter(job)
-        ]
+        # If the current filter is an extension of the previous one, we know
+        # that previously excluded jobs can be skipped without re-evaluation.
+        if self._job_filter_prev and self._job_filter.startswith(self._job_filter_prev):
+            filtered_jobs = (
+                job
+                for job in self._snapshot.jobs
+                if job.last_filter_result and self._job_matches_filter(job)
+            )
+        else:
+            filtered_jobs = (
+                job for job in self._snapshot.jobs if self._job_matches_filter(job)
+            )
+
+        return _sort_jobs_for_display(filtered_jobs)
 
     def _job_matches_filter(self, job: Job) -> bool:
         if not self._job_filter:
@@ -797,7 +807,9 @@ class PBSTUI(App[None]):
                 job.queue,
             ]
             job.filter_key = " ".join((x.lower() for x in values if x))
-        return not any(term not in job.filter_key for term in terms)
+        result = not any(term not in job.filter_key for term in terms)
+        job.last_filter_result = result
+        return result
 
     async def action_refresh(self) -> None:
         await self.refresh_data()
@@ -822,6 +834,7 @@ class PBSTUI(App[None]):
 
     def on_input_changed(self, event: Input.Changed) -> None:
         if event.input.id == "jobs_filter":
+            self._job_filter_prev = self._job_filter
             self._job_filter = event.value.strip()
             self._refresh_jobs_table()
 
