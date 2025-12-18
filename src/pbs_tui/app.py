@@ -231,6 +231,8 @@ def _job_queue_duration(job: Job, reference_time: datetime) -> Optional[timedelt
     if start is None:
         return None
     end = job.start_time or reference_time
+    if job.state == "Q":
+        end = reference_time
     start, end = _normalize_datetimes_for_delta(start, end)
     delta = end - start
     return timedelta(seconds=0) if delta.total_seconds() < 0 else delta
@@ -247,6 +249,16 @@ def _job_time_remaining(
         return walltime
     remaining = walltime - runtime
     return timedelta(seconds=0) if remaining.total_seconds() < 0 else remaining
+
+
+def _state_aware_runtime(job: Job, reference_time: datetime) -> tuple[Optional[timedelta], Optional[timedelta]]:
+    if job.state in ("R", "E", "F"):
+        runtime_delta = _job_runtime_delta(job, reference_time)
+        remaining = _job_time_remaining(job, reference_time, runtime_delta)
+        return runtime_delta, remaining
+    return None, None
+
+
 def job_node_summary(job: Job) -> tuple[Optional[int], Optional[str]]:
     """Return a heuristic ``(node_count, first_node)`` tuple for *job*.
 
@@ -278,10 +290,11 @@ def format_job_table_cells(job: Job, reference_time: datetime) -> dict[str, Opti
     """Return column-keyed cell values for job table renderers."""
 
     node_count, first_node = job_node_summary(job)
-    runtime_delta = _job_runtime_delta(job, reference_time)
+    runtime_delta, time_remaining = _state_aware_runtime(job, reference_time)
     queued_duration = _job_queue_duration(job, reference_time)
-    time_remaining = _job_time_remaining(job, reference_time, runtime_delta)
     est_start = job.estimated_start_time or job.start_time
+    if job.state == "Q":
+        est_start = None
     if node_count is not None and first_node:
         nodes_display = f"{node_count} ({first_node})"
     elif node_count is not None:
@@ -388,9 +401,8 @@ class DetailPanel(Static):
     def show_job(self, job: Job, *, reference_time: Optional[datetime] = None) -> None:
         self.display = True
         effective_reference = reference_time or datetime.now(timezone.utc)
-        runtime_delta = _job_runtime_delta(job, effective_reference)
+        runtime_delta, remaining = _state_aware_runtime(job, effective_reference)
         queued_duration = _job_queue_duration(job, effective_reference)
-        remaining = _job_time_remaining(job, effective_reference, runtime_delta)
         node_count, first_node = job_node_summary(job)
 
         table = Table.grid(padding=(0, 1))
